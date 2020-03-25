@@ -23,7 +23,8 @@ class BaseModel(models.Model):
 
 class UserMeta(BaseModel):
     '''用户类, 其中 privilege 为8位权限码 sub_field 报名信息'''
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.OneToOneField(User,
+                                on_delete=models.CASCADE)
     unionID = models.CharField(max_length=29)
     avatar_url = models.TextField(default="")
     nick_name = models.TextField(default="")
@@ -50,20 +51,23 @@ class Enrollment(BaseModel):
 
 class Course(BaseModel):
     '''一组Section, 例: 算法导论上 算法导论下'''
-    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
+    enrollment = models.ForeignKey(Enrollment,
+                                   on_delete=models.CASCADE)
     name = models.TextField(default="")  # title
     description = models.TextField(default="")
 
 
 class Section(BaseModel):
     '''一组Lesson, 例: 图算法'''
-    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    course = models.ForeignKey(Course,
+                               on_delete=models.CASCADE)
     name = models.TextField(default="")  # title
 
 
 class Lesson(BaseModel):
     '''单次课, 未添加字段, 名片, 文稿, 视频回顾, 文字速记'''
-    section = models.ForeignKey(Section, on_delete=models.CASCADE)
+    section = models.ForeignKey(Section,
+                                on_delete=models.CASCADE)
     order = models.IntegerField(default=0)
     title = models.TextField(default="")
     description = models.TextField(default="")
@@ -77,12 +81,14 @@ class Lesson(BaseModel):
 class UserEnrollment(BaseModel):
     '''关系类'''
     user = models.ForeignKey(
-        UserMeta, on_delete=models.CASCADE, related_name="student")
+        UserMeta, on_delete=models.CASCADE,
+        related_name="student")
     enrollment = models.ForeignKey(
-        Enrollment, on_delete=models.CASCADE, related_name="enrollment")  # 届别
+        Enrollment, on_delete=models.CASCADE,
+        related_name="enrollment")  # 届别
 
     TYPE_OF_STATUS = (
-        ('RE', 'register'),
+        ('RG', 'register'),
         ('UI', 'under_interview'),
         ('AC', 'accept'),
         ('OB', 'observer'),
@@ -96,21 +102,26 @@ class UserEvaluation(BaseModel):
     '''user对其教师的评价'''
     enrollmentId = models.IntegerField(default=0)
     interviewer = models.ForeignKey(
-        UserMeta, related_name="interviewer", on_delete=models.CASCADE)
+        UserMeta, related_name="interviewer",
+        on_delete=models.CASCADE)
     interviewee = models.ForeignKey(
-        UserMeta, related_name="interviewee", on_delete=models.CASCADE)
+        UserMeta, related_name="interviewee",
+        on_delete=models.CASCADE)
     score = models.IntegerField(default=0)
     review = models.TextField(default="")
 
 
 class Activity(BaseModel):  # 独立的部:
     '''是对应某一个Class的学生的活动'''
-    Enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
+    Enrollment = models.ForeignKey(Enrollment,
+                                   on_delete=models.CASCADE)
     name = models.TextField(default="")
     description = models.TextField(default="")
 
 
 class UserActivity(BaseModel):  # 独立的部:
     '''是对应某一个Class的学生的活动'''
-    user = models.ForeignKey(UserMeta, on_delete=models.CASCADE)
-    activity = models.ForeignKey(Activity, on_delete=models.CASCADE)
+    user = models.ForeignKey(UserMeta,
+                             on_delete=models.CASCADE)
+    activity = models.ForeignKey(Activity,
+                                 on_delete=models.CASCADE)

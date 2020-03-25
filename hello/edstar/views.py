@@ -10,7 +10,7 @@ from rest_framework.authtoken.models import Token
 
 import datetime
 
-from .models import UserMeta, UserEvaluation
+from .models import *
 from .serializers import *
 
 import json
@@ -26,6 +26,22 @@ def create_auth_token(sender, instance=None, created=False, **kwargs):
 def bit_to_num(bit):
     '''将处于bit二进制位上的数转为十进制'''
     return 1 << (bit-1)
+
+
+def manager_required(func):
+    '''
+    只能装饰APIView类post或get成员函数
+    '''
+    def warpper(*args, **kwargs):
+        request = args[1]
+        user_query = UserMeta.objects.filter(user=request.user)
+        if not user_query.exists():
+            raise PermissionDenied()
+        user = user_query[0]
+        if has_authority(user, 'is_admin'):
+            return func(*args, **kwargs)
+        raise PermissionDenied()
+    return warpper
 
 
 def has_authority(user, string):
@@ -169,8 +185,7 @@ class EnrollmentAPI(APIView):
 class ActivityAPI(APIView):
     def get(self, request):
         activity = Activity.objects.all()
-        serializer = ActivitySerializer(activity).data
-        return Response(serializer, status=status.HTTP_200_OK)
+        return Response(ActivitySerializer(activity).data, status=status.HTTP_200_OK)
 
     def post(self, request):
         postdata = request.data
@@ -249,3 +264,106 @@ class InterviewAPI(APIView):
                 interview.review = review
             interview.save()
         return Response(UserEvaluationSerializer(interview).data, status=status.HTTP_201_CREATED)
+
+
+class UserEnrollmentAPI(APIView):
+    def get(self, request):
+        user_enroll = UserEnrollment.objects.all()
+        return Response(UserEnrollmentSerializer(user_enroll).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        postdata = request.data
+        user_id = int(get_or_raise(postdata, 'user'))
+        enrollment_id = int(get_or_raise(postdata, 'enrollment'))
+        status = postdata.get('status', 'RG')
+        user_query = UserMeta.objects.filter(id=user_id)
+        if not user_query.exists():
+            raise NotFound('No such user')
+        user = user_query[0]
+        enrollment_query = Enrollment.objects.filter(id=enrollment_id)
+        if not enrollment_query.exists():
+            raise NotFound('No such enrollment')
+        enrollment = enrollment_query[0]
+        user_enrollment = UserEnrollment.objects.create(
+            user=user,
+            enrollment=enrollment,
+            status=status
+        )
+        return Response(UserEnrollmentSerializer(user_enrollment).data,
+                        status=status.HTTP_200_OKHTTP_201_CREATED)
+
+
+class CourseAPI(BaseModel):
+    def get(self, request):
+        postdata = request.query_params
+        enrollment_id = get_or_raise(postdata, 'enrollmentId')
+        enrollment_query = Enrollment.objects.filter(id=enrollment_id)
+        if not enrollment_query.exists():
+            raise NotFound('No such enrollment.')
+        enrollment = enrollment_query[0]
+        courses = Course.objects.filter(enrollment=enrollment)
+        return Response(CourseSerializer(courses).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        postdata = request.data
+        enrollment_id = postdata.get('enrollmentId')
+        name = postdata.get('name')
+        description = postdata.get('description')
+        enrollment_query = Enrollment.objects.filter(id=enrollment_id)
+        if not enrollment_query.exists():
+            raise NotFound('No such enrollment.')
+        enrollment = enrollment_query[0]
+        course_query = Course.objects.filter(enrollment=enrollment)
+        if not course_query.exists():
+            raise NotFound('No such course.')
+        course = course_query[0]
+        if name:
+            course.name = name
+        if description:
+            course.description = description
+        course.save()
+        return Response(CourseSerializer(course).data, status=status.HTTP_200_OK)
+
+
+class SectionAPI(BaseModel):
+    def get(self, request):
+        postdata = request.query_params
+        course_id = get_or_raise(postdata, 'courseId')
+        course_query = Course.objects.filter(id=course_id)
+        if not course_query.exists():
+            raise NotFound('No such course.')
+        course = course_query[0]
+        section = Section.objects.filter(course=course)
+        return Response(SectionSerializer(section).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        postdata = request.data
+        course_id = postdata.get('courseId')
+        name = postdata.get('name')
+        course_query = Course.objects.filter(id=course_id)
+        if not course_query.exists():
+            raise NotFound('No such course.')
+        course = course_query[0]
+        section_query = Section.objects.filter(course=course)
+        if not section_query.exists():
+            raise NotFound('No such section.')
+        section = section_query[0]
+        if name:
+            section.name = name
+        section.save()
+        return Response(SectionSerializer(section).data, status=status.HTTP_201_CREATED)
+
+
+def LessonAPI(APIView):
+    def get(self, request):
+        postdata = request.query_params
+        section_id = get_or_raise('sectionId')
+        section_query = Section.objects.filter(id=section_id)
+        if not section_query.exists():
+            raise NotFound('No such section')
+        section = section_query[0]
+        lessons = Lesson.objects.filter(section=section)
+        return Response(LessonSerializer(lessons).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        postdata = request.data
