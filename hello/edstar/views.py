@@ -17,6 +17,10 @@ import json
 
 from django.conf import settings
 
+from dateutil import parser as date_parser
+
+from .wechat import get_open_id
+
 
 def create_auth_token(sender, instance=None, created=False, **kwargs):
     if created:
@@ -28,46 +32,74 @@ def bit_to_num(bit):
     return 1 << (bit-1)
 
 
-def manager_required(func):
+def is_manager_required(func):
     '''
     只能装饰APIView类post或get成员函数
     '''
     def warpper(*args, **kwargs):
         request = args[1]
-        user_query = UserMeta.objects.filter(user=request.user)
-        if not user_query.exists():
-            raise PermissionDenied()
-        user = user_query[0]
-        if has_authority(user, 'is_admin'):
+        user = get_user(user=request.user)
+        if user.privilege > 0:
             return func(*args, **kwargs)
         raise PermissionDenied()
     return warpper
 
 
+def privilege_required(privilege, option='and'):
+    '''
+    只能装饰APIView类post或get成员函数
+    '''
+    def middle(func):
+        def warpper(*args, **kwargs):
+            request = args[1]
+            user = UserMeta.objects.filter(user=request.user).first()
+            if type(privilege) == str:
+                if privilege == 'is_manager' and user.privilege > 0:
+                    return func(*args, **kwargs)
+                else:
+                    return has_authority(user, privilege)
+            elif type(privilege) == list:
+                passed = ''
+                if option == 'or':
+                    passed = False
+                elif option == 'and':
+                    passed = True
+                for each_privilege in privilege:
+                    if has_authority(user, privilege):
+                        if option == 'or':
+                            passed = True
+                        elif option == 'and':
+                            passed = False
+                if passed:
+                    return func(*args, **kwargs)
+            else:
+                raise PermissionDenied()
+        return warpper
+    return middle
+
+
 def has_authority(user, string):
     '''
-    user = request.user
-    1 管理招生信息 manage_enrollment
-    2 管理面试信息 manage_interview
-    3 参与面试评价 participate_interview
-    4 管理课程 manage_lessons
-    5 管理活动 manage_activity
-    6 管理校友 manage_fellow
-    7 设置管理员 set_admin
-    8 是否是管理员 is_admin
+    user = UserMeta
+    1 管理招生信息 can_manage_enrollment
+    2 管理面试信息 can_manage_interview
+    3 参与面试评价 can_participate_interview
+    4 管理课程 can_manage_lessons
+    5 管理活动 can_manage_activity
+    6 管理校友 can_manage_fellow
+    7 设置管理员 can_set_manager
+    8 是否是管理员 can_is_amanager
     '''
     right_dict = {
-        'manage_enrollment':     1,
-        'manage_interview':      2,
-        'participate_interview': 3,
-        'manage_lessons':        4,
-        'manage_activity':       5,
-        'manage_fellow':         6,
-        'set_admin':             7,
-        'is_admin':              8
+        'can_manage_enrollment':     1,
+        'can_manage_interview':      2,
+        'can_participate_interview': 3,
+        'can_manage_lessons':        4,
+        'can_manage_activity':       5,
+        'can_manage_fellow':         6,
+        'can_set_manager':           7
     }
-    right = num_to_bit(user.privilege)
-    return right_dict[string] in right
+    return right_dict[string] in num_to_bit(user.privilege)
 
 
 def num_to_bit(num):
@@ -80,259 +112,373 @@ def num_to_bit(num):
     return bit_array
 
 
-def get_or_raise(data, attr):
+def get_or_raise(data, attr, attr_type=None):
     '''获取字典data的attr属性，否则抛出异常'''
-    if data.get(attr):
-        return data[attr]
+    value = data.get(attr)
+    if value:
+        if not attr_type:
+            return attr
+        elif type(value) == attr_type:
+            return value
+        else:
+            raise ParseError('Attribute "{}" type wrong.'.format(attr))
     else:
-        raise ParseError('Attr "{}" cannot be empty.'.format(attr))
+        raise ParseError('Attribute "{}" cannot be empty.'.format(attr))
+
+
+def save_or_raise(serializer):
+    if serializer.is_valid():
+        serializer.save()
+    else:
+        print(serializer.errors)
+        raise ParseError(serializer.errors)
 
 
 def get_user(**kwargs):
     '''
-    require: user=request.user or
+    require: user=request.user or id= int
     '''
-    usermeta_query = UserMeta.objects.filter(**kwargs)
-    if not usermeta_query.exists():
-        raise NotFound('User({}) not found.'.format(kwargs))
-    user = usermeta_query[0]
-    return user
+    return UserMeta.objects.filter(**kwargs).first()
+
+
+'''
+GET 获取
+POST 创建or修改
+DELETE 删除
+'''
 
 
 class CreateUserAPI(APIView):
-    def _create_user(self, unionID):
-        user = User.objects.create_user(username=unionID, password=unionID)
+    def _create_user(self, openId):
+        user = User.objects.create_user(username=openId, password=openId)
         user.save()
         return user
 
     def get(self, request):
         postdata = request.data
-        unionID = get_or_raise(postdata, 'unionID')
-        user_query = User.objects.filter(username=unionID)
-        if not user_query.exists():
-            raise NotFound('No such user.')
-        user = user_query[0]
+        code = get_or_raise(postdata, 'code', str)
+        openId = get_open_id(code)
+        user = get_user(openId=openId)
         token = Token.objects.get_or_create(user=user)[0]
-        return JsonResponse({'token': token.key}, status=200)
+        return JsonResponse({'data': UserMetaSerializer(user).data,
+                             'token': token.key}, status=status.HTTP_200_OK)
 
     def post(self, request):
         postdata = request.data
-        unionID = get_or_raise(postdata, 'unionID')
-        avatar_url = get_or_raise(postdata, 'avatarUrl')
-        nick_name = get_or_raise(postdata, 'nickName')
-        gender = get_or_raise(postdata, 'gender')
-        phone = get_or_raise(postdata, 'phone')
-        birth_date = get_or_raise(postdata, 'birthDate')
-        wechat = get_or_raise(postdata, 'wechat')
-        mail = get_or_raise(postdata, 'mail')
-        country = get_or_raise(postdata, 'country')
-        province = get_or_raise(postdata, 'province')
-        city = get_or_raise(postdata, 'city')
-        kind = get_or_raise(postdata, 'kind')
-        privilege = int(postdata.get('privilege', 0))
-        sub_field = postdata.get('sub_field', '')
-        user = self._create_user(unionID)
-        new_user = UserMeta.objects.create(
-            user=user, unionID=unionID, avatar_url=avatar_url,
-            nick_name=nick_name, gender=gender, phone=phone,
-            birth_date=birth_date, wechat=wechat, mail=mail,
-            country=country, province=province, city=city,
-            kind=kind, privilege=privilege, sub_field=sub_field,
-        )
+        openId = get_or_raise(postdata, 'openId')
+        user = self._create_user(openId)
+        serializer = UserMetaSerializer(
+            data=get_or_raise(postdata, 'userInfo', dict))
+        save_or_raise(serializer)
         return Response(status=status.HTTP_200_OK)
 
 
 class EnrollmentAPI(APIView):
+    # @privilege_required('can_manage_enrollment')
     def get(self, request):
+        '''交互1 查看招生列表'''
         enrollments = Enrollment.objects.all()
-        return Response(EnrollmentSerializer(enrollments).data, status=status.HTTP_200_OK)
+        enrollments = list(enrollments)
+        for enrollment in enrollments:
+            enrollment.count = UserEnrollment.objects.filter(
+                enrollment=enrollment, status='AC').count()
+        return Response(EnrollmentSerializer(enrollments, many=True).data, status=status.HTTP_200_OK)
 
+    # @privilege_required('can_manage_enrollment')
     def post(self, request):
         postdata = request.data
-        id = get_or_raise(postdata, 'id')
+        enrollmentId = postdata.get('enrollmentId')
         name = postdata.get('name')
         description = postdata.get('description')
-        open_status = postdata.get('openStatus', False)
-        time = postdata.get('endAt').split('-')
-        end_at = datetime.datetime(
-            time.get(0), time.get(1), time.get(2),
-            time.get(3), time.get(4), time.get(5)
-        )
-        if id == -1:
-            enrollment = Enrollment.object.create(
-                name=name,
-                description=description,
-                open_status=open_status,
-                end_at=end_at)
-            return Response(EnrollmentSerializer(enrollment).data, status=status.HTTP_201_CREATED)
+        open_status = postdata.get('openStatus')
+        time = get_or_raise(postdata, 'endAt', str)
+        end_at = date_parser.parse(time)
+        if not enrollmentId:
+            '''交互2 创建招生管理资料'''
+            serializer = EnrollmentSerializer(data={
+                'name': name,
+                'description': description,
+                'open_status': open_status,
+                'end_at': end_at
+            })
+            save_or_raise(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
         else:
-            enrollment_query = Enrollment.objects.filter(id=id)
-            if not enrollment_query.exists():
-                raise NotFound('Enrollment not found.')
-            enrollment = enrollment_query[0]
-            if name:
-                enrollment.name = name
-            if description:
-                enrollment.description = description
-            if open_status:
-                enrollment.open_status = open_status
-            if end_at:
-                enrollment.end_at = end_at
-            enrollment.save()
-        return Response(EnrollmentSerializer(enrollment).data, status=status.HTTP_200_OK)
+            '''交互2 编辑招生管理资料'''
+            enrollment = Enrollment.objects.filter(
+                id=enrollmentId).first()
+            serializer = EnrollmentSerializer(instance=enrollment, data={
+                'name': name,
+                'description': description,
+                'open_status': open_status,
+                'end_at': end_at
+            })
+            save_or_raise(serializer)
+            return Response(EnrollmentSerializer(enrollment).data, status=status.HTTP_200_OK)
+
+    # @privilege_required('can_manage_enrollment')
+    def delete(self, request):
+        postdata = request.data
+        enrollment_ids = get_or_raise(postdata, 'enrollmentId', list)
+        return Response(enrollment_ids, status=status.HTTP_200_OK)
+        for enrollment_id in enrollment_ids:
+            Enrollment.objects.filter(
+                id=enrollment_id).first().delete()
+        return Response(status=status.HTTP_200_OK)
 
 
 class ActivityAPI(APIView):
     def get(self, request):
+        '''交互1 查看所有活动'''
         activity = Activity.objects.all()
-        return Response(ActivitySerializer(activity).data, status=status.HTTP_200_OK)
+        return Response(ActivitySerializer(activity, many=True).data, status=status.HTTP_200_OK)
 
     def post(self, request):
         postdata = request.data
-        id = get_or_raise(postdata, 'id')
-        activity_query = Activity.objects.filter(id=id)
-        if not activity_query.exists():
-            raise NotFound('Activity not found.')
-        activity = activity_query[0]
+        activity_id = get_or_raise(postdata, 'activityId')
+        enrollment_id = get_or_raise(postdata, 'enrollment', int)
+        enrollment = Enrollment.objects.filter(
+            id=enrollment_id).first()
+        name = get_or_raise(postdata, 'name', str)
+        description = get_or_raise(postdata, 'description', str)
 
-        name = postdata.get('name')
-        description = postdata.get('description')
-        if name:
-            activity.name = name
-        if description:
-            activity.description = description
-        activity.save()
-        return Response(ActivitySerializer(activity).data, status=status.HTTP_201_CREATED)
+        if not activity_id:
+            '''交互2 创建活动'''
+            serializer = ActivitySerializer(data={
+                'enrollment': enrollment,
+                'name': name,
+                'description': description
+            })
+            save_or_raise(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            '''交互3 修改活动'''
+            activity = Activity.objects.filter(
+                id=activity_id).first()
+            serializer = ActivitySerializer(instance=activity, data={
+                                            'name': name, 'description': description})
+            save_or_raise(serializer)
+            return Response(status=status.HTTP_200_OK)
+
+
+class ManageUserApi(APIView):
+    def get(self, request):
+        '''交互0 查看所有用户'''
+        user = UserMeta.objects.all()
+        return Response(UserMetaSerializer(user, many=True).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        '''交互2 编辑用户字段 '''
+        postdata = request.data
+        user = get_user(id=get_or_raise(postdata, 'userId', int))
+        serializer = UserMetaSerializer(
+            instance=user, data=postdata.get('userInfo'), partial=True)
+
+    def delete(self, request):
+        '''交互1 删除用户'''
+        postdata = request.data
+        user_id = get_or_raise(postdata, 'userId', int)
+        UserMeta.objects.filter(id=user_id).first().delete()
+        return Response(status=status.HTTP_200_OK)
+
+
+class ManageSuperUserApi(APIView):
+    def get(self, request):
+        '''交互0 获得所有管理员'''
+        user = UserMeta.objects.exclude(privilege=0)
+        return Response(UserMetaSerializer(user, many=True).data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        postdata = request.data
+        bit = postdata.get('bit')
+        if bit:
+            '''交互1 修改权限'''
+            user = get_user(id=get_or_raise(postdata, 'userId', int))
+            privilege = 1 << (bit - 1)
+            serializer = UserMetaSerializer(instance=user, data={
+                privilege: user.privilege + privilege
+            }, partial=True)
+            save_or_raise(serializer)
+            return Response(status=status.HTTP_200_OK)
+        else:
+            '''交互2 增加管理员√'''
+            managers = get_or_raise(postdata, 'managers', list)
+            for manager in managers:
+                user_id = get_or_raise(manager, 'userId', int)
+                privilege = 1 << (get_or_raise(manager, 'bit', int) - 1)
+                get_user(id=user_id).privilege + privilege
+            return Response(status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        '''交互3 删除管理员'''
+        postdata = request.data
+        user_ids = get_or_raise(postdata, 'userId', list)
+        for user_id in user_ids:
+            get_user(id=user_id).delete()
+        return Response(status=status.HTTP_200_OK)
 
 
 class InterviewAPI(APIView):
+    # @privilege_required(['can_manage_enrollment', 'can_participate_interview'], 'or')
     def get(self, request):
-        user_query = UserMeta.objects.filter(user=request.user)
-        if not user_query.exists():
-            raise PermissionDenied()
-        user = user_query[0]
-        if has_authority(user, 'manage_interview'):
-            '''get all interviews'''
-            interviews = UserEvaluation.objects.all()
-            return Response(UserEvaluationSerializer(interviews).data, status=status.HTTP_200_OK)
-        elif has_authority(user, 'participate_interview'):
-            '''get his/her interviews'''
-            interviews_query = UserEvaluation.objects.filter(
-                interviewer=user)
-            if not interviews_query.exists():
-                raise NotFound('No interviews.')
-            interviews = interviews_query
-            return Response(UserEvaluationSerializer(interviews).data, status=status.HTTP_200_OK)
+        '''交互1 查看面试管理(有面试管理权+有参与面试评价权)'''
+        user = UserMeta.objects.filter(user=request.user).first()
+        if has_authority(user, 'can_manage_interview'):
+            interviews = UserEnrollment.objects.all()
+            return Response(UserEnrollmentSerializer(interviews, many=True).data, status=status.HTTP_200_OK)
+        elif has_authority(user, 'can_participate_interview'):
+            interviews = UserEvaluation.objects.filter(interviewer=user)
+            return Response(UserEvaluationSerializer(interviews, many=True).data, status=status.HTTP_200_OK)
         else:
             raise PermissionDenied
 
+    # @privilege_required('can_manage_interview')
     def post(self, request):
+        '''交互2 给已有报名信息分配面试官(有面试管理权)'''
         postdata = request.data
-        id = int(get_or_raise(postdata, 'id'))
-        if id == -1:
-            interviewer = get_or_raise(postdata, 'interviewer')
-            interviewee = get_or_raise(postdata, 'interviewee')
-            score = postdata.get('score', 0)
-            review = postdata.get('review', '')
-            interviewer_id = int(interviewer)
-            interviewee_id = int(interviewee)
-            interviewer = UserMeta.objects.get(id=interviewer_id)
-            interviewee = UserMeta.objects.get(id=interviewee_id)
-            interview = UserEvaluation.objects.create(
-                interviewer=interviewer,
-                interviewee=interviewee,
-                score=score,
-                review=review
-            )
-            return Response(UserEvaluationSerializer(interview).data, status=status.HTTP_200_OK)
-        else:
-            interview_query = UserEvaluation.objects.filter(id=id)
-            if not interview_query.exists():
-                raise NotFound('Interview not found.')
-            interview = interview_query[0]
-            interviewer = postdata.get('interviewer')
-            interviewee = postdata.get('interviewee')
-            score = postdata.get('score')
-            review = postdata.get('review')
-            if interviewer:
-                interview.interviewer = interviewer
-            if interviewee:
-                interview.interviewee = interviewee
-            if score:
-                interview.score = score
-            if review:
-                interview.review = review
-            interview.save()
-        return Response(UserEvaluationSerializer(interview).data, status=status.HTTP_201_CREATED)
+
+        user_enroll_id = get_or_raise(postdata, 'userEnrollId', int)
+        user_enroll = UserEnrollment.objects.filter(id=user_enroll_id).first()
+
+        interviewee_id = get_or_raise(postdata, 'interviewee', int)
+        interviewee = get_user(id=interviewee_id)
+
+        interviewer_ids = get_or_raise(postdata, 'interviewer', list)
+
+        serializer = UserMetaSerializer(
+            instance=interview, data=postdata.get('user'))
+        save_or_raise(serializer)  # 更改用户资料
+
+        serializer = UserEnrollmentSerializer(
+            instance=interview,
+            data={'status': get_or_raise(postdata, 'status', str)},
+            partial=True)
+        save_or_raise(serializer)  # 更改用户注册课的状态
+
+        for interviewer_id in interviewer_ids:
+            serializer = UserEvaluationSerializer(data={
+                'interviewer': get_user(id=interviewer_id),
+                'interviewee': get_user(id=interviewee_id),
+            }, partial=True)
+            save_or_raise(serializer)  # 添加面试
+        return Response(status=status.HTTP_201_CREATED)
+
+    # @privilege_required('can_participate_interview')
+    def put(self, request):
+        ''' 交互3 评价面试(有参与面试评价权)'''
+        postdata = request.data
+        interview_id = postdata.get('interviewId')
+        user = get_user(user=request.user)
+        interview = UserEvaluation.objects.filter(id=interview_id).first()
+        interviewer = get_or_raise(postdata, 'interviewer', int)
+        interviewee_id = get_or_raise(postdata, 'interviewee', int)
+        score = postdata.get('score')
+        review = postdata.get('review')
+        serializer = UserEvaluationSerializer(instance=interview, data={
+            'score': score,
+            'review': review
+        }, partial=True)
+        save_or_raise(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    # @privilege_required('can_manage_interview')
+    def delete(self, request):
+        postdata = request.data
+        interview_id = postdata.get('interviewId', int)
+        UserEvaluation.objects.filter(id=interview_id).first().delete()
+        return Response(status=status.HTTP_200_OK)
 
 
 class UserEnrollmentAPI(APIView):
     def get(self, request):
         user_enroll = UserEnrollment.objects.all()
-        return Response(UserEnrollmentSerializer(user_enroll).data, status=status.HTTP_200_OK)
+        return Response(UserEnrollmentSerializer(user_enroll, many=True).data, status=status.HTTP_200_OK)
 
     def post(self, request):
         postdata = request.data
-        user_id = int(get_or_raise(postdata, 'user'))
-        enrollment_id = int(get_or_raise(postdata, 'enrollment'))
-        status = postdata.get('status', 'RG')
-        user_query = UserMeta.objects.filter(id=user_id)
-        if not user_query.exists():
-            raise NotFound('No such user')
-        user = user_query[0]
-        enrollment_query = Enrollment.objects.filter(id=enrollment_id)
-        if not enrollment_query.exists():
-            raise NotFound('No such enrollment')
-        enrollment = enrollment_query[0]
-        user_enrollment = UserEnrollment.objects.create(
-            user=user,
-            enrollment=enrollment,
-            status=status
-        )
-        return Response(UserEnrollmentSerializer(user_enrollment).data,
-                        status=status.HTTP_200_OKHTTP_201_CREATED)
+        user_id = get_or_raise(postdata, 'user', int)
+        enrollment_id = get_or_raise(postdata, 'enrollment', int)
+        status = postdata.get('status')
+        user = get_user(user=request.user)
+        enrollment = Enrollment.objects.filter(id=enrollment_id).first()
+        serializer = UserEnrollmentSerializer(instance=enrollment, data={
+            user: user,
+            enrollment: enrollment,
+            status: status
+        })
+        save_or_raise(serializer)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-class CourseAPI(BaseModel):
+class MangageCourseAPI(APIView):
+    # @privilege_required('can_manage_course')
     def get(self, request):
-        postdata = request.query_params
-        enrollment_id = get_or_raise(postdata, 'enrollmentId')
-        enrollment_query = Enrollment.objects.filter(id=enrollment_id)
-        if not enrollment_query.exists():
-            raise NotFound('No such enrollment.')
-        enrollment = enrollment_query[0]
-        courses = Course.objects.filter(enrollment=enrollment)
-        return Response(CourseSerializer(courses).data, status=status.HTTP_200_OK)
 
+        postdata = request.query_params
+        course_id = postdata.get('courseId')
+        if not course_id:
+            '''交互1 查看所有的course'''
+            courses = [{'enrollment': course.enrollment.name,
+                        'name': course.name,
+                        'description': course.description} for course in Course.objects.all()]
+            return Response(courses, status=status.HTTP_200_OK)
+        else:
+            '''course的详细'''
+            course = Course.objects.filter(id=course_id).first()
+            sections = Section.objects.filter(course=course)
+            data = []
+            for section in sections:
+                lessons = Lesson.objects.filter(
+                    section=section).order_by('order')
+                data.append({'name': section.name,
+                             'lessons': LessonSerializer(lessons, many=True).data
+                             })
+            return Response(data, status=status.HTTP_200_OK)
+
+    # @privilege_required('can_manage_course')
     def post(self, request):
+
         postdata = request.data
+        course_id = postdata.get('courseId')
         enrollment_id = postdata.get('enrollmentId')
         name = postdata.get('name')
         description = postdata.get('description')
-        enrollment_query = Enrollment.objects.filter(id=enrollment_id)
-        if not enrollment_query.exists():
-            raise NotFound('No such enrollment.')
-        enrollment = enrollment_query[0]
-        course_query = Course.objects.filter(enrollment=enrollment)
-        if not course_query.exists():
-            raise NotFound('No such course.')
-        course = course_query[0]
-        if name:
-            course.name = name
-        if description:
-            course.description = description
-        course.save()
-        return Response(CourseSerializer(course).data, status=status.HTTP_200_OK)
+
+        course_id = postdata.get('courseId')
+        if course_id:
+            '''交互3 修改course'''
+            course = Course.objects.filter(id=course_id).first()
+            serializer = CourseSerializer(instance=course, data={
+                'name': name,
+                'description': description
+            }, partial=True)
+            save_or_raise(serializer)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        else:
+            '''交互2 添加course'''
+            serializer = CourseSerializer(data={
+                'enrollment': enrollment_id,
+                'name': name,
+                'description': description
+            })
+            save_or_raise(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    def delete(self, request):
+        '''交互4 删除course'''
+        postdata = request.data
+        course_ids = get_or_raise(postdata, 'courseId', list)
+        for course_id in course_ids:
+            Course.objects.filter(id=course_id).delete()
+        return Response(status=status.HTTP_200_OK)
 
 
-class SectionAPI(BaseModel):
+class SectionAPI(APIView):
     def get(self, request):
         postdata = request.query_params
         course_id = get_or_raise(postdata, 'courseId')
-        course_query = Course.objects.filter(id=course_id)
-        if not course_query.exists():
-            raise NotFound('No such course.')
-        course = course_query[0]
+        course = Course.objects.filter(id=course_id).first()
         section = Section.objects.filter(course=course)
         return Response(SectionSerializer(section).data, status=status.HTTP_200_OK)
 
@@ -340,30 +486,23 @@ class SectionAPI(BaseModel):
         postdata = request.data
         course_id = postdata.get('courseId')
         name = postdata.get('name')
-        course_query = Course.objects.filter(id=course_id)
-        if not course_query.exists():
-            raise NotFound('No such course.')
-        course = course_query[0]
-        section_query = Section.objects.filter(course=course)
-        if not section_query.exists():
-            raise NotFound('No such section.')
-        section = section_query[0]
-        if name:
-            section.name = name
-        section.save()
-        return Response(SectionSerializer(section).data, status=status.HTTP_201_CREATED)
+        course = Course.objects.filter(id=course_id).first()
+        section = Section.objects.filter(course=course).first()
+        serializer = SectionSerializer(instance=section, data={
+            'name': name
+        })
+        save_or_raise(serializer)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-def LessonAPI(APIView):
+class LessonAPI(APIView):
     def get(self, request):
         postdata = request.query_params
         section_id = get_or_raise('sectionId')
-        section_query = Section.objects.filter(id=section_id)
-        if not section_query.exists():
-            raise NotFound('No such section')
-        section = section_query[0]
+        section = Section.objects.filter(id=section_id).first()
         lessons = Lesson.objects.filter(section=section)
         return Response(LessonSerializer(lessons).data, status=status.HTTP_200_OK)
 
     def post(self, request):
         postdata = request.data
+        return Response(status=status.HTTP_200_OK)

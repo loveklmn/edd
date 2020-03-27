@@ -6,9 +6,8 @@ from django.contrib.postgres.fields import ArrayField, JSONField
 
 import datetime
 
+from django.utils import timezone
 
-def get_default_data():
-    return {'msg': 'No value.'}
 
 
 class BaseModel(models.Model):
@@ -21,64 +20,82 @@ class BaseModel(models.Model):
         abstract = True
 
 
-class UserMeta(BaseModel):
+# class SoftDeleteManager(models.Manager):
+#     def get_queryset(self):
+#         return super().objects.filter(is_deleted=False)
+
+
+class SoftDeleteModel(models.Model):
+    class Meta:
+        abstract = True
+
+    is_deleted = models.BooleanField(default=0)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    # objects = SoftDeleteManager()
+
+    def delete(self):
+        self.is_deleted = True
+        self.save()
+
+    def restore(self):
+        self.is_deleted = False
+        self.save()
+
+
+class UserMeta(SoftDeleteModel):
     '''用户类, 其中 privilege 为8位权限码 sub_field 报名信息'''
-    user = models.OneToOneField(User,
-                                on_delete=models.CASCADE)
-    unionID = models.CharField(max_length=29)
-    avatar_url = models.TextField(default="")
-    nick_name = models.TextField(default="")
-    gender = models.IntegerField(default=0)
-    phone = models.TextField(default="")
-    birth_date = models.DateField()
-    wechat = models.TextField(default="")
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    openId = models.TextField(blank=True, null=True)
+    avatarUrl = models.TextField(blank=True, null=True)
+    nickName = models.TextField(blank=True, null=True)
+    gender = models.IntegerField(blank=True, null=True)
+    phone = models.TextField(blank=True, null=True)
+    birthDate = models.DateField()
+    wechat = models.TextField(blank=True, null=True)
     mail = models.EmailField(default="")
-    country = models.TextField(default="")
-    province = models.TextField(default="")
-    city = models.TextField(default="")
-    kind = models.TextField(default="")
-    privilege = models.IntegerField(default=0)
-    sub_field = models.TextField(default="")
+    country = models.TextField(blank=True, null=True)
+    province = models.TextField(blank=True, null=True)
+    city = models.TextField(blank=True, null=True)
+    kind = models.TextField(blank=True, null=True)
+    privilege = models.IntegerField(blank=True, null=True, default=0)
+    subField = models.TextField(blank=True, null=True)
 
 
-class Enrollment(BaseModel):
+class Enrollment(SoftDeleteModel):
     '''课程类, 一组course, 例:一届招生课程的描述 THU 2020 '''
-    name = models.TextField(default="")
-    description = models.TextField(default="")
+    name = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
     open_status = models.BooleanField(default=True)
-    end_at = models.DateTimeField()
+    end_at = models.DateTimeField(blank=True, null=True)
 
 
-class Course(BaseModel):
+class Course(SoftDeleteModel):
     '''一组Section, 例: 算法导论上 算法导论下'''
-    enrollment = models.ForeignKey(Enrollment,
-                                   on_delete=models.CASCADE)
-    name = models.TextField(default="")  # title
-    description = models.TextField(default="")
+    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
+    name = models.TextField(blank=True, null=True)  # title
+    description = models.TextField(blank=True, null=True)
 
 
-class Section(BaseModel):
+class Section(SoftDeleteModel):
     '''一组Lesson, 例: 图算法'''
-    course = models.ForeignKey(Course,
-                               on_delete=models.CASCADE)
-    name = models.TextField(default="")  # title
+    course = models.ForeignKey(Course, on_delete=models.CASCADE)
+    name = models.TextField(blank=True, null=True)  # title
 
 
-class Lesson(BaseModel):
+class Lesson(SoftDeleteModel):
     '''单次课, 未添加字段, 名片, 文稿, 视频回顾, 文字速记'''
-    section = models.ForeignKey(Section,
-                                on_delete=models.CASCADE)
-    order = models.IntegerField(default=0)
-    title = models.TextField(default="")
-    description = models.TextField(default="")
-    teacher = models.TextField(default="")
-    card = models.TextField(default="")
-    slides = models.FilePathField(default="")
-    videos = models.FilePathField(default="")
-    notes = models.TextField(default="")
+    section = models.ForeignKey(Section, on_delete=models.CASCADE)
+    order = models.IntegerField(blank=True, null=True)
+    title = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
+    teacher = models.TextField(blank=True, null=True)
+    card = models.TextField(blank=True, null=True)
+    slides = models.TextField(default="")
+    videos = models.TextField(default="")
+    notes = models.TextField(blank=True, null=True)
 
 
-class UserEnrollment(BaseModel):
+class UserEnrollment(SoftDeleteModel):
     '''关系类'''
     user = models.ForeignKey(
         UserMeta, on_delete=models.CASCADE,
@@ -86,7 +103,6 @@ class UserEnrollment(BaseModel):
     enrollment = models.ForeignKey(
         Enrollment, on_delete=models.CASCADE,
         related_name="enrollment")  # 届别
-
     TYPE_OF_STATUS = (
         ('RG', 'register'),
         ('UI', 'under_interview'),
@@ -98,28 +114,28 @@ class UserEnrollment(BaseModel):
     status = models.CharField(max_length=2, choices=TYPE_OF_STATUS)
 
 
-class UserEvaluation(BaseModel):
+class UserEvaluation(SoftDeleteModel):
     '''user对其教师的评价'''
-    enrollmentId = models.IntegerField(default=0)
+    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
     interviewer = models.ForeignKey(
         UserMeta, related_name="interviewer",
         on_delete=models.CASCADE)
     interviewee = models.ForeignKey(
         UserMeta, related_name="interviewee",
         on_delete=models.CASCADE)
-    score = models.IntegerField(default=0)
-    review = models.TextField(default="")
+    score = models.IntegerField(blank=True, null=True)
+    review = models.TextField(blank=True, null=True)
 
 
-class Activity(BaseModel):  # 独立的部:
+class Activity(SoftDeleteModel):  # 独立的部:
     '''是对应某一个Class的学生的活动'''
     Enrollment = models.ForeignKey(Enrollment,
                                    on_delete=models.CASCADE)
-    name = models.TextField(default="")
-    description = models.TextField(default="")
+    name = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True)
 
 
-class UserActivity(BaseModel):  # 独立的部:
+class UserActivity(SoftDeleteModel):  # 独立的部:
     '''是对应某一个Class的学生的活动'''
     user = models.ForeignKey(UserMeta,
                              on_delete=models.CASCADE)

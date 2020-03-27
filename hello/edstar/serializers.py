@@ -2,6 +2,12 @@ from rest_framework import serializers
 from .models import *
 
 
+class UserMetaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserMeta
+        fields = '__all__'
+
+
 class EnrollmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enrollment
@@ -42,3 +48,4 @@ class LessonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Lesson
         fields = '__all__'
+        ordering_fields = 'order'
