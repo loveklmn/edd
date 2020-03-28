@@ -14,6 +14,12 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class UserEnrollmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Enrollment
+        fields = ['id', 'name', 'pictureUrl']
+
+
 class ActivitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Activity
@@ -49,3 +55,9 @@ class LessonSerializer(serializers.ModelSerializer):
         model = Lesson
         fields = '__all__'
         ordering_fields = 'order'
+
+
+class UserActivitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserActivity
+        fields = '__all__'
