@@ -18,6 +18,9 @@ class BaseModel(models.Model):
     class Meta:
         abstract = True
 
+    def hard_delete(self):
+        self.delete()
+
 
 class SoftDeleteManager(models.Manager):
     def get_queryset(self):
@@ -28,34 +31,26 @@ class SoftDeleteModel(models.Model):
     class Meta:
         abstract = True
 
-    is_deleted = models.BooleanField(default=0)
+    is_deleted = models.BooleanField(default=False)
     deleted_at = models.DateTimeField(null=True, blank=True)
     objects = SoftDeleteManager()
 
     def delete(self):
         self.is_deleted = True
+        self.deleted_at = timezone.now()
         self.save()
 
     def restore(self):
         self.is_deleted = False
+        self.deleted_at = None
         self.save()
 
 
 class UserMeta(SoftDeleteModel):
     '''用户类, 其中 privilege 为8位权限码 sub_field 报名信息'''
     user = models.OneToOneField(User, on_delete=models.CASCADE)
-    openId = models.TextField(blank=True, null=True)
-    avatarUrl = models.TextField(blank=True, null=True)
-    nickName = models.TextField(blank=True, null=True)
-    gender = models.IntegerField(blank=True, null=True)
-    phone = models.TextField(blank=True, null=True)
-    birthDate = models.DateField()
-    wechat = models.TextField(blank=True, null=True)
-    mail = models.EmailField(default="")
-    country = models.TextField(blank=True, null=True)
+    openId = models.TextField(blank=True, null=False)
     province = models.TextField(blank=True, null=True)
-    city = models.TextField(blank=True, null=True)
-    kind = models.TextField(blank=True, null=True)
     privilege = models.IntegerField(blank=True, null=True, default=0)
     subField = models.TextField(blank=True, null=True)
 
@@ -63,6 +58,7 @@ class UserMeta(SoftDeleteModel):
 class Enrollment(SoftDeleteModel):
     '''课程类, 一组course, 例:一届招生课程的描述 THU 2020 '''
     name = models.TextField(blank=True, null=True)
+    pictureUrl = models.TextField(blank=True, null=False)
     description = models.TextField(blank=True, null=True)
     open_status = models.BooleanField(default=True)
     end_at = models.DateTimeField(blank=True, null=True)
@@ -103,14 +99,14 @@ class UserEnrollment(SoftDeleteModel):
         Enrollment, on_delete=models.CASCADE,
         related_name="enrollment")  # 届别
     TYPE_OF_STATUS = (
-        ('RG', 'register'),
-        ('UI', 'under_interview'),
-        ('AC', 'accept'),
-        ('OB', 'observer'),
-        ('RE', 'REFUSED')
+        ('REG', 'register'),
+        ('UIN', 'under_interview'),
+        ('ACC', 'accept'),
+        ('OBS', 'observer'),
+        ('REF', 'REFUSED')
     )
     # 4种可能：已报名、面试中、已录取、旁听、已拒绝
-    status = models.CharField(max_length=2, choices=TYPE_OF_STATUS)
+    status = models.CharField(max_length=3, choices=TYPE_OF_STATUS)
 
 
 class UserEvaluation(SoftDeleteModel):
@@ -128,15 +124,16 @@ class UserEvaluation(SoftDeleteModel):
 
 class Activity(SoftDeleteModel):  # 独立的部:
     '''是对应某一个Class的学生的活动'''
-    Enrollment = models.ForeignKey(Enrollment,
-                                   on_delete=models.CASCADE)
+    Enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE)
+    pictureUrl = models.TextField(blank=True, null=True)
     name = models.TextField(blank=True, null=True)
     description = models.TextField(blank=True, null=True)
+    limit = models.IntegerField(default=100, null=False)
+    end_at = models.DateTimeField(blank=True, null=True)
 
 
 class UserActivity(SoftDeleteModel):  # 独立的部:
     '''是对应某一个Class的学生的活动'''
-    user = models.ForeignKey(UserMeta,
-                             on_delete=models.CASCADE)
-    activity = models.ForeignKey(Activity,
-                                 on_delete=models.CASCADE)
+    user = models.ForeignKey(UserMeta, on_delete=models.CASCADE)
+    activity = models.ForeignKey(Activity, on_delete=models.CASCADE)
+    status = models.BooleanField(default=False)
