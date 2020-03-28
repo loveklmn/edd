@@ -9,7 +9,6 @@ import datetime
 from django.utils import timezone
 
 
-
 class BaseModel(models.Model):
     '''含时间戳的抽象类'''
     id = models.AutoField(primary_key=True)
@@ -20,9 +19,9 @@ class BaseModel(models.Model):
         abstract = True
 
 
-# class SoftDeleteManager(models.Manager):
-#     def get_queryset(self):
-#         return super().objects.filter(is_deleted=False)
+class SoftDeleteManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(is_deleted=False)
 
 
 class SoftDeleteModel(models.Model):
@@ -31,7 +30,7 @@ class SoftDeleteModel(models.Model):
 
     is_deleted = models.BooleanField(default=0)
     deleted_at = models.DateTimeField(null=True, blank=True)
-    # objects = SoftDeleteManager()
+    objects = SoftDeleteManager()
 
     def delete(self):
         self.is_deleted = True
