@@ -10,7 +10,7 @@ urlpatterns = [
     path('user/', ManageUserApi.as_view()),
     path('manager/', ManageSuperUserApi.as_view()),
     path('interview/', InterviewAPI.as_view()),
-    path('interview/', UserEnrollmentAPI.as_view()),
+    path('enrollments/', UserEnrollmentAPI.as_view()),
     path('section/', SectionAPI.as_view()),
     path('course/', MangageCourseAPI.as_view()),
     path('lesson/', LessonAPI.as_view())

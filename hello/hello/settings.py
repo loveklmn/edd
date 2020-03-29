@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    # 'corsheaders',
+    'corsheaders',
     'rest_framework.authtoken',
     'edstar'
 ]
@@ -57,6 +57,9 @@ REST_FRAMEWORK = {
     ),
 }
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
+    # Use GZip compression to reduce bandwidth.
+    'django.middleware.gzip.GZipMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -64,6 +67,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware'
 ]
 
 ROOT_URLCONF = 'hello.urls'
@@ -123,15 +127,16 @@ AUTH_PASSWORD_VALIDATORS = [
 # Pagination settings
 # https://www.django-rest-framework.org/api-guide/pagination/
 
+
 REST_FRAMEWORK = {
 
     'DEFAULT_RENDERER_CLASSES': (
         'djangorestframework_camel_case.render.CamelCaseJSONRenderer',
         'djangorestframework_camel_case.render.CamelCaseBrowsableAPIRenderer',
-        'rest_framework.pagination.LimitOffsetPagination'
+        # 'rest_framework.pagination.LimitOffsetPagination'
         # Any other renders
     ),
-    'PAGE_SIZE': 100,
+    # 'PAGE_SIZE': 100,
     'DEFAULT_PARSER_CLASSES': (
         # If you use MultiPartFormParser or FormParser, we also have a camel case version
         'djangorestframework_camel_case.parser.CamelCaseFormParser',
@@ -139,6 +144,7 @@ REST_FRAMEWORK = {
         'djangorestframework_camel_case.parser.CamelCaseJSONParser',
         # Any other parsers
     ),
+    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
 }
 
 # Internationalization
@@ -163,8 +169,4 @@ STATIC_ROOT = os.path.join(os.path.dirname(
     os.path.dirname(BASE_DIR)), 'static')
 MEDIA_ROOT = os.path.join(os.path.dirname(os.path.dirname(BASE_DIR)), 'media')
 
-CORS_ORIGIN_WHITELIST = (
-    # '*'
-)
-
-ALLOWED_HOSTS = ['*']
+CORS_ORIGIN_ALLOW_ALL = True

@@ -249,10 +249,10 @@ class ManagerEnrollmentAPI(APIView):
     def get(self, request):
         '''交互1 查看招生列表'''
         enrollments = Enrollment.objects.all()
-        enrollments = list(enrollments)
-        for enrollment in enrollments:
-            enrollment.count = UserEnrollment.objects.filter(
-                enrollment=enrollment, status='AC').count()
+        # enrollments = list(enrollments)
+        # for enrollment in enrollments:
+        #     enrollment.count = UserEnrollment.objects.filter(
+        #         enrollment=enrollment, status='AC').count()
         return Response(EnrollmentSerializer(enrollments, many=True).data, status=status.HTTP_200_OK)
 
     # @privilege_required('can_manage_enrollment')
@@ -260,6 +260,7 @@ class ManagerEnrollmentAPI(APIView):
         postdata = request.data
         enrollmentId = postdata.get('enrollmentId')
         name = postdata.get('name')
+        picture_url = postdata.get('pictureUrl')
         description = postdata.get('description')
         open_status = postdata.get('openStatus')
         time = get_or_raise(postdata, 'endAt', str)
@@ -269,6 +270,7 @@ class ManagerEnrollmentAPI(APIView):
             serializer = EnrollmentSerializer(data={
                 'name': name,
                 'description': description,
+                'pictureUrl': picture_url,
                 'open_status': open_status,
                 'end_at': end_at
             })
@@ -283,6 +285,7 @@ class ManagerEnrollmentAPI(APIView):
                 'name': name,
                 'description': description,
                 'open_status': open_status,
+                'pictureUrl': picture_url,
                 'end_at': end_at
             })
             save_or_raise(serializer)
@@ -568,7 +571,7 @@ class UserEnrollmentAPI(APIView):
     def post(self, request):
         postdata = request.data
         user_id = get_or_raise(postdata, 'user', int)
-        enrollment_id = get_or_raise(postdata, 'enrollment', int)
+        enrollment_id = get_or_raise(postdata, 'enrollmentId', int)
         status = postdata.get('status')
         user = get_user(user=request.user)
         enrollment = Enrollment.objects.filter(id=enrollment_id).first()
