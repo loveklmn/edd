@@ -13,7 +13,7 @@ gunicorn = "*"
 djangorestframework = "*"
 python-dateutil = "*"
 requests = "*"
-
+djangorestframework-camel-case = "*"
 
 [dev-packages]
 

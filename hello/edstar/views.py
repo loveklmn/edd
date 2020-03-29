@@ -245,7 +245,6 @@ class UserEnrollmentAPI(APIView):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-
 class ManagerEnrollmentAPI(APIView):
     def get(self, request):
         '''交互1 查看招生列表'''
@@ -319,7 +318,7 @@ class ActivityAPI(APIView):
             activity_data = [{
                 'name': activity.name,
                 'pictureUrl': activity.pictureUrl,
-                'peopleNumber': UserActivity.objects.filter(activity=activity, status=True).count()
+                'peopleCount': UserActivity.objects.filter(activity=activity, status=True).count()
             } for activity in Activity.objects.all()]
             return Response(activity_data, status=status.HTTP_200_OK)
 
@@ -519,12 +518,14 @@ class InterviewAPI(APIView):
             instance=interviewee, data=data, partial=True)
         save_or_raise(serializer)
         return_data['user'] = serializer.data  # 更改用户资料
-
+        user_status = get_or_raise(postdata, 'status', str)
         serializer = UserEnrollmentSerializer(
             instance=user_enroll,
-            data={'status': get_or_raise(postdata, 'status', str)},
+            data={'status': user_status},
             partial=True)
         save_or_raise(serializer)
+        if user_status == 'ACC':
+            user_enroll.enrollment.people_count += 1
         return_data['userEnrollment'] = serializer.data  # 更改用户注册课的状态
 
         for interviewer_id in interviewer_ids:

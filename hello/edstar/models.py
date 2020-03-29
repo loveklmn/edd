@@ -27,7 +27,7 @@ class SoftDeleteManager(models.Manager):
         return super().get_queryset().filter(is_deleted=False)
 
 
-class SoftDeleteModel(models.Model):
+class SoftDeleteModel(BaseModel):
     class Meta:
         abstract = True
 
@@ -60,6 +60,7 @@ class Enrollment(SoftDeleteModel):
     name = models.TextField(blank=True, null=True)
     pictureUrl = models.TextField(blank=True, null=False)
     description = models.TextField(blank=True, null=True)
+    people_count = models.IntegerField(null=False, default=0)
     open_status = models.BooleanField(default=True)
     end_at = models.DateTimeField(blank=True, null=True)
 
