@@ -12,6 +12,7 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Enrollment
         exclude = ('is_deleted', 'deleted_at')
+        ordering_fields = 'created_at'
 
 
 class UserEnrollmentSerializer(serializers.ModelSerializer):

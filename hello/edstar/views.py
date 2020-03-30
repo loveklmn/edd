@@ -153,8 +153,8 @@ class GetOrCreateUserAPI(APIView):
     页面1 注册
     '''
 
-    def _create_user(self, openId):
-        user = User.objects.create_user(username=openId, password=openId)
+    def _create_user(self, open_id):
+        user = User.objects.create_user(username=open_id, password=open_id)
         user.save()
         return user
 
@@ -167,12 +167,12 @@ class GetOrCreateUserAPI(APIView):
         '''
         postdata = request.query_params
         code = get_or_raise(postdata, 'code', str)
-        openId = get_open_id(code)
-        user_query = UserMeta.objects.filter(openId=openId)
+        open_id = get_open_id(code)
+        user_query = UserMeta.objects.filter(open_id=open_id)
         if user_query.exists:
             user = user_query.first()
         else:
-            user = self._create_user(openId)
+            user = self._create_user(open_id)
         token = Token.objects.get_or_create(user=user)[0]
         return Response({'data': UserMetaSerializer(user).data,
                          'token': token.key}, status=status.HTTP_200_OK)
@@ -187,7 +187,7 @@ class UserEnrollmentAPI(APIView):
     def get(self, request):
         '''
         情况1:      获得所有enrollment的信息
-        @parameter Integer              enrollmentId    对应enrollment的ID     
+        @parameter Integer              enrollment_id    对应enrollment的ID     
         @returns   []                   enrollment      对应enrollment的信息
         @returns   ('RG'| 'RE' | ...)   status          当前用户对应所有enrollment的状态
 
@@ -197,7 +197,7 @@ class UserEnrollmentAPI(APIView):
         objects  - enrollment 对应enrollment的状态
         '''
         postdata = request.query_params
-        enrollment_id = postdata.get('enrollmentId')
+        enrollment_id = postdata.get('enrollment_id')
         user = get_user(user=request.user)
         if enrollment_id:
             enrollment = Enrollment.objects.filter(id=enrollment_id).first()
@@ -233,7 +233,7 @@ class UserEnrollmentAPI(APIView):
         user = get_user(user=request.user)
         subField = postdata.get('subField')
         province = postdata.get('province')
-        enrollment_id = postdata.get('enrollmentId')
+        enrollment_id = postdata.get('enrollment_id')
         serializer = UserMetaSerializer(instance=user, data={
             'subField': subField,
             'province': province
@@ -253,19 +253,19 @@ class ManagerEnrollmentAPI(APIView):
         # for enrollment in enrollments:
         #     enrollment.count = UserEnrollment.objects.filter(
         #         enrollment=enrollment, status='AC').count()
-        return Response(EnrollmentSerializer(enrollments, many=True).data, status=status.HTTP_200_OK)
+        return Response({'data': EnrollmentSerializer(enrollments, many=True).data}, status=status.HTTP_200_OK)
 
     # @privilege_required('can_manage_enrollment')
     def post(self, request):
         postdata = request.data
-        enrollmentId = postdata.get('enrollmentId')
+        enrollment_id = postdata.get('enrollment_id')
         name = postdata.get('name')
-        picture_url = postdata.get('pictureUrl')
+        picture_url = postdata.get('picture_url')
         description = postdata.get('description')
-        open_status = postdata.get('openStatus')
-        time = get_or_raise(postdata, 'endAt', str)
+        open_status = postdata.get('open_status')
+        time = postdata.get('end_at')
         end_at = date_parser.parse(time)
-        if not enrollmentId:
+        if not enrollment_id:
             '''交互2 创建招生管理资料'''
             serializer = EnrollmentSerializer(data={
                 'name': name,
@@ -275,12 +275,12 @@ class ManagerEnrollmentAPI(APIView):
                 'end_at': end_at
             })
             save_or_raise(serializer)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            return Response({'data': serializer.data}, status=status.HTTP_201_CREATED)
 
         else:
             '''交互2 编辑招生管理资料'''
             enrollment = Enrollment.objects.filter(
-                id=enrollmentId).first()
+                id=enrollment_id).first()
             serializer = EnrollmentSerializer(instance=enrollment, data={
                 'name': name,
                 'description': description,
@@ -289,13 +289,12 @@ class ManagerEnrollmentAPI(APIView):
                 'end_at': end_at
             })
             save_or_raise(serializer)
-            return Response(EnrollmentSerializer(enrollment).data, status=status.HTTP_200_OK)
+            return Response({'data': serializer.data}, status=status.HTTP_200_OK)
 
     # @privilege_required('can_manage_enrollment')
     def delete(self, request):
         postdata = request.data
-        enrollment_ids = get_or_raise(postdata, 'enrollmentId', list)
-        return Response(enrollment_ids, status=status.HTTP_200_OK)
+        enrollment_ids = get_or_raise(postdata, 'enrollment_id', list)
         for enrollment_id in enrollment_ids:
             Enrollment.objects.filter(
                 id=enrollment_id).first().delete()
@@ -313,7 +312,7 @@ class ActivityAPI(APIView):
         交互2 点击对应活动, 获得活动详细
         '''
         postdata = request.query_params
-        activity_id = postdata.get('activityId')
+        activity_id = postdata.get('activity_id')
         if activity_id:
             activity = Activity.objects.filter(id=activity_id).first()
             return Response(ActivitySerializer(activity).data, status=status.HTTP_200_OK)
@@ -330,7 +329,7 @@ class ActivityAPI(APIView):
         管理员新建活动和修改活动
         '''
         postdata = request.data
-        activity_id = get_or_raise(postdata, 'activityId')
+        activity_id = get_or_raise(postdata, 'activity_id')
         enrollment_id = get_or_raise(postdata, 'enrollment', int)
         enrollment = Enrollment.objects.filter(
             id=enrollment_id).first()
@@ -363,7 +362,7 @@ class ActivityAPI(APIView):
         交互3 报名活动
         '''
         postdata = request.data
-        activity_id = get_or_raise(postdata, 'activityId')
+        activity_id = get_or_raise(postdata, 'activity_id')
         activity = Activity.objects.filter(id=activity_id).first()
         if activity.limit >= UserActivity.objects.filter(activity=activity).count():
             return Response({'msg': '活动人数已满。'}, status=status.HTTP_400_BAD_REQUEST)
@@ -390,7 +389,7 @@ class ActivityAPI(APIView):
         '''
         postdata = request.data
         user = get_user(user=request.user)
-        activity_id = get_or_raise(postdata, 'activityId')
+        activity_id = get_or_raise(postdata, 'activity_id')
         activity = Activity.objects.filter(id=activity_id).first()
         UserActivity.objects.filter(
             activity=activity, user=user).first().status = False
@@ -406,14 +405,14 @@ class ManageUserApi(APIView):
     def post(self, request):
         '''交互2 编辑用户字段 '''
         postdata = request.data
-        user = get_user(id=get_or_raise(postdata, 'userId', int))
+        user = get_user(id=get_or_raise(postdata, 'user_id', int))
         serializer = UserMetaSerializer(
             instance=user, data=postdata.get('userInfo'), partial=True)
 
     def delete(self, request):
         '''交互1 删除用户'''
         postdata = request.data
-        user_id = get_or_raise(postdata, 'userId', int)
+        user_id = get_or_raise(postdata, 'user_id', int)
         UserMeta.objects.filter(id=user_id).first().delete()
         return Response(status=status.HTTP_200_OK)
 
@@ -429,7 +428,7 @@ class ManageSuperUserApi(APIView):
         bit = postdata.get('bit')
         if bit:
             '''交互1 修改权限'''
-            user = get_user(id=get_or_raise(postdata, 'userId', int))
+            user = get_user(id=get_or_raise(postdata, 'user_id', int))
             privilege = 1 << (bit - 1)
             serializer = UserMetaSerializer(instance=user, data={
                 privilege: user.privilege + privilege
@@ -440,7 +439,7 @@ class ManageSuperUserApi(APIView):
             '''交互2 增加管理员√'''
             managers = get_or_raise(postdata, 'managers', list)
             for manager in managers:
-                user_id = get_or_raise(manager, 'userId', int)
+                user_id = get_or_raise(manager, 'user_id', int)
                 privilege = 1 << (get_or_raise(manager, 'bit', int) - 1)
                 get_user(id=user_id).privilege + privilege
             return Response(status=status.HTTP_200_OK)
@@ -448,7 +447,7 @@ class ManageSuperUserApi(APIView):
     def delete(self, request):
         '''交互3 删除管理员'''
         postdata = request.data
-        user_ids = get_or_raise(postdata, 'userId', list)
+        user_ids = get_or_raise(postdata, 'user_id', list)
         for user_id in user_ids:
             get_user(id=user_id).delete()
         return Response(status=status.HTTP_200_OK)
@@ -467,7 +466,7 @@ class InterviewAPI(APIView):
         user = UserMeta.objects.filter(user=request.user).first()
         if has_authority(user, 'can_manage_interview'):
             postdata = request.query_params
-            enrollment_id = postdata.get('enrollmentId')
+            enrollment_id = postdata.get('enrollment_id')
             enrollment = Enrollment.objects.filter(id=enrollment_id).first()
             user_enrolls = UserEnrollment.objects.filter(
                 enrollment=enrollment, status='REG')
@@ -503,7 +502,7 @@ class InterviewAPI(APIView):
         '''交互2 给已有报名信息分配面试官(有面试管理权)'''
         postdata = request.data
 
-        user_enroll_id = get_or_raise(postdata, 'userEnrollId', int)
+        user_enroll_id = get_or_raise(postdata, 'userEnroll_id', int)
         user_enroll = UserEnrollment.objects.filter(id=user_enroll_id).first()
 
         interviewee_id = get_or_raise(postdata, 'interviewee', int)
@@ -544,7 +543,7 @@ class InterviewAPI(APIView):
     def put(self, request):
         ''' 交互3 评价面试(有参与面试评价权)'''
         postdata = request.data
-        interview_id = postdata.get('interviewId')
+        interview_id = postdata.get('interview_id')
         interview = UserEvaluation.objects.filter(id=interview_id).first()
         serializer = UserEvaluationSerializer(instance=interview, data={
             'score': postdata.get('score'),
@@ -557,7 +556,7 @@ class InterviewAPI(APIView):
     def delete(self, request):
         '''交互4 删除UserEvaluation'''
         postdata = request.data
-        interview_ids = postdata.get('interviewId', list)
+        interview_ids = postdata.get('interview_id', list)
         for interview_id in interview_ids:
             UserEvaluation.objects.filter(id=interview_id).first().delete()
         return Response(status=status.HTTP_200_OK)
@@ -571,7 +570,7 @@ class UserEnrollmentAPI(APIView):
     def post(self, request):
         postdata = request.data
         user_id = get_or_raise(postdata, 'user', int)
-        enrollment_id = get_or_raise(postdata, 'enrollmentId', int)
+        enrollment_id = get_or_raise(postdata, 'enrollment_id', int)
         status = postdata.get('status')
         user = get_user(user=request.user)
         enrollment = Enrollment.objects.filter(id=enrollment_id).first()
@@ -599,7 +598,7 @@ class AlumniAPI(APIView):
 
     def post(self, request):
         postdata = request.data
-        user_id = postdata.get('userId')
+        user_id = postdata.get('user_id')
         target = get_user(id=user_id)
         user = get_user(user=request.user)
         self_user_enrolls = UserEnrollment.objects.filter(user=user)
@@ -629,7 +628,7 @@ class UserCourseAPI(APIView):
 
     def post(self, request):
         postdata = request.data
-        course_id = postdata.get('courseId')
+        course_id = postdata.get('course_id')
         course = Course.objects.filter(id=course_id).first()
         return Response(CourseSerializer(course).data, status=status.HTTP_200_OK)
 
@@ -639,7 +638,7 @@ class MangageCourseAPI(APIView):
     def get(self, request):
 
         postdata = request.query_params
-        course_id = postdata.get('courseId')
+        course_id = postdata.get('course_id')
         if not course_id:
             '''交互1 查看所有的course'''
             courses = [{'enrollment': course.enrollment.name,
@@ -663,12 +662,12 @@ class MangageCourseAPI(APIView):
     def post(self, request):
 
         postdata = request.data
-        course_id = postdata.get('courseId')
-        enrollment_id = postdata.get('enrollmentId')
+        course_id = postdata.get('course_id')
+        enrollment_id = postdata.get('enrollment_id')
         name = postdata.get('name')
         description = postdata.get('description')
 
-        course_id = postdata.get('courseId')
+        course_id = postdata.get('course_id')
         if course_id:
             '''交互3 修改course'''
             course = Course.objects.filter(id=course_id).first()
@@ -691,7 +690,7 @@ class MangageCourseAPI(APIView):
     def delete(self, request):
         '''交互4 删除course'''
         postdata = request.data
-        course_ids = get_or_raise(postdata, 'courseId', list)
+        course_ids = get_or_raise(postdata, 'course_id', list)
         for course_id in course_ids:
             Course.objects.filter(id=course_id).delete()
         return Response(status=status.HTTP_200_OK)
@@ -700,14 +699,14 @@ class MangageCourseAPI(APIView):
 class SectionAPI(APIView):
     def get(self, request):
         postdata = request.query_params
-        course_id = get_or_raise(postdata, 'courseId')
+        course_id = get_or_raise(postdata, 'course_id')
         course = Course.objects.filter(id=course_id).first()
         section = Section.objects.filter(course=course)
         return Response(SectionSerializer(section).data, status=status.HTTP_200_OK)
 
     def post(self, request):
         postdata = request.data
-        course_id = postdata.get('courseId')
+        course_id = postdata.get('course_id')
         name = postdata.get('name')
         course = Course.objects.filter(id=course_id).first()
         section = Section.objects.filter(course=course).first()
@@ -721,7 +720,7 @@ class SectionAPI(APIView):
 class LessonAPI(APIView):
     def get(self, request):
         postdata = request.query_params
-        section_id = get_or_raise('sectionId')
+        section_id = get_or_raise('section_id')
         section = Section.objects.filter(id=section_id).first()
         lessons = Lesson.objects.filter(section=section)
         return Response(LessonSerializer(lessons).data, status=status.HTTP_200_OK)
