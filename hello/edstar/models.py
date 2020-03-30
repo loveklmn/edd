@@ -8,6 +8,8 @@ import datetime
 
 from django.utils import timezone
 
+import json
+
 
 class BaseModel(models.Model):
     '''含时间戳的抽象类'''
@@ -54,6 +56,9 @@ class UserMeta(SoftDeleteModel):
     privilege = models.IntegerField(blank=True, null=True, default=0)
     subField = models.TextField(blank=True, null=True)
 
+    def field(self):
+        return json.loads(self.subField)
+
 
 class Enrollment(SoftDeleteModel):
     '''课程类, 一组course, 例:一届招生课程的描述 THU 2020 '''
@@ -63,6 +68,9 @@ class Enrollment(SoftDeleteModel):
     people_count = models.IntegerField(null=False, default=0)
     open_status = models.BooleanField(default=True)
     end_at = models.DateTimeField(blank=True, null=True)
+
+    def people_count(self):
+        return UserEnrollment.objects.filter(status="ACC").count()
 
 
 class Course(SoftDeleteModel):

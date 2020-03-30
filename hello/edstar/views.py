@@ -465,23 +465,20 @@ class InterviewAPI(APIView):
         '''交互1 查看面试管理(有面试管理权+有参与面试评价权)'''
         user = UserMeta.objects.filter(user=request.user).first()
         if has_authority(user, 'can_manage_interview'):
-            postdata = request.query_params
-            enrollment_id = postdata.get('enrollment_id')
-            enrollment = Enrollment.objects.filter(id=enrollment_id).first()
-            user_enrolls = UserEnrollment.objects.filter(
-                enrollment=enrollment, status='REG')
+            user_enrolls = UserEnrollment.objects.all()
             user_enroll_interview_data = []
             for user_enroll in user_enrolls:
                 interviews = UserEvaluation.objects.filter(
                     enrollment=user_enroll.enrollment,
                     interviewee=user_enroll.user)
                 user_enroll_interview_data.append({
+                    'id': user_enroll.id,
                     'status': user_enroll.status,
                     'enrollment': EnrollmentSerializer(user_enroll.enrollment).data,
                     'user': UserMetaSerializer(user_enroll.user).data,
                     'interviews': UserEvaluationSerializer(interviews, many=True).data
                 })
-            return Response(user_enroll_interview_data, status=status.HTTP_200_OK)
+            return Response({'data': user_enroll_interview_data}, status=status.HTTP_200_OK)
         elif has_authority(user, 'can_participate_interview'):
             interviews = UserEvaluation.objects.filter(interviewer=user)
             interviews_data = [{
@@ -493,7 +490,7 @@ class InterviewAPI(APIView):
                 'score': interview.score,
                 'review': interview.review,
             } for interview in interviews]
-            return Response(interviews_data, status=status.HTTP_200_OK)
+            return Response({'data': interviews_data}, status=status.HTTP_200_OK)
         else:
             raise PermissionDenied
 
@@ -502,7 +499,7 @@ class InterviewAPI(APIView):
         '''交互2 给已有报名信息分配面试官(有面试管理权)'''
         postdata = request.data
 
-        user_enroll_id = get_or_raise(postdata, 'userEnroll_id', int)
+        user_enroll_id = get_or_raise(postdata, 'user_enroll_id', int)
         user_enroll = UserEnrollment.objects.filter(id=user_enroll_id).first()
 
         interviewee_id = get_or_raise(postdata, 'interviewee', int)

@@ -3,15 +3,23 @@ from .models import *
 
 
 class UserMetaSerializer(serializers.ModelSerializer):
+    field = serializers.DictField()
+
     class Meta:
         model = UserMeta
-        exclude = ('is_deleted', 'deleted_at', 'openId')
+        read_only_fields = (
+            'field',
+        )
+        exclude = ('is_deleted', 'deleted_at', 'openId', 'user')
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
+    people_count = serializers.IntegerField()
+
     class Meta:
         model = Enrollment
         exclude = ('is_deleted', 'deleted_at')
+        read_only_fields = ('people_count',)
         ordering_fields = 'created_at'
 
 
@@ -31,6 +39,7 @@ class UserEvaluationSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserEvaluation
         exclude = ('is_deleted', 'deleted_at')
+        depth = 3
 
 
 class UserEnrollmentSerializer(serializers.ModelSerializer):
